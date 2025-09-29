@@ -161,9 +161,9 @@ def process_image(img_bgr, panel_vertical=False, cm_per_px=None):
     # annotation
     ann = img_bgr.copy()
     cnts,_ = cv2.findContours(pmask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    cv2.drawContours(ann, cnts, -1, (0,255,255), 2)  # yellow panel
+    cv2.drawContours(ann, cnts, -1, (0,255,255), 2)
     rcnts,_ = cv2.findContours(valid, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    cv2.drawContours(ann, rcnts, -1, (0,255,0), 2)   # green rust
+    cv2.drawContours(ann, rcnts, -1, (0,255,0), 2)  
     cv2.putText(ann, f"Rust coverage: {coverage:.2f}%", (20,40), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0,0,0), 3, cv2.LINE_AA)
     cv2.putText(ann, f"Rust coverage: {coverage:.2f}%", (20,40), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0,255,0), 2, cv2.LINE_AA)
 
