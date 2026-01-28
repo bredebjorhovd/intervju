@@ -42,19 +42,106 @@ def cm_per_pixel_from_aruco(img, marker_size_cm=5.0):
 
 # -------------------------- CLI --------------------------
 def parse_args():
-    ap = argparse.ArgumentParser(description="Rust coverage estimator (classic CV)")
-    ap.add_argument("--glob", default="images/*.jpg", help="Glob for input images (e.g. images/*.jpg)")
-    # Scale without ArUco:
-    ap.add_argument("--cm-per-pixel", type=float, default=None, help="Direct scale in cm/pixel")
-    ap.add_argument("--ref-length-cm", type=float, default=None, help="Known real length (cm) between two points")
-    ap.add_argument("--ref-length-px", type=float, default=None, help="Measured pixel distance for the known length")
-    # ArUco (optional)
-    ap.add_argument("--aruco", action="store_true", help="Try ArUco to get scale (if marker present)")
-    ap.add_argument("--aruco-size-cm", type=float, default=5.0, help="Physical width of the ArUco marker (cm)")
-    # Panel selection
-    ap.add_argument("--prefer-vertical", action="store_true", help="Bias to a tall vertical panel (good for pipes/poles)")
-    # Output
-    ap.add_argument("--out-dir", default="out", help="Output directory for CSV and annotated images")
+    ap = argparse.ArgumentParser(
+        description="Advanced rust coverage estimator using computer vision (HSV + LAB color space, ArUco support).",
+        epilog="""
+EXAMPLES:
+  # Basic usage: process all JPGs, output to 'out/' folder
+  python rust_estimate_cv.py
+
+  # With direct scale and output to custom directory
+  python rust_estimate_cv.py --cm-per-pixel 0.05 --out-dir results/
+
+  # For vertical objects (pipes, poles) with ArUco marker calibration
+  python rust_estimate_cv.py --prefer-vertical --aruco --aruco-size-cm 4.5
+
+  # Using reference measurement
+  python rust_estimate_cv.py --glob photos/*.png --ref-length-cm 15.0 --ref-length-px 300
+
+SCALE CALIBRATION METHODS (in order of priority):
+  1. --cm-per-pixel: Direct scale (cm per pixel). Fastest and most reliable if you know it.
+  2. --ref-length-cm + --ref-length-px: Measure a known real distance in the image.
+  3. --aruco: Auto-detect ArUco marker in image for automatic calibration.
+     Requires a 4x4_50 ArUco marker visible in the image(s).
+     Set --aruco-size-cm to match the physical marker size (default: 5.0 cm).
+  4. Without scale: Run percent-only mode. Coverage % will be reported,
+     but physical area (cm²) will not be calculated.
+
+OUTPUT:
+  - out/results.csv: Image names, coverage percentages, and cm² (if scaled)
+  - out/*_annot.jpg: Annotated images showing:
+    * Yellow contours: detected metal panel
+    * Green contours: detected rust regions
+    * Text overlay: rust coverage percentage
+
+PANEL DETECTION:
+  - Default: Targets gray/low-saturation painted metal surfaces, biased to image center
+  - --prefer-vertical: Optimized for tall objects (pipes, poles, vertical structures)
+
+RUST DETECTION:
+  - Uses dual HSV + LAB color thresholding for robust orange/brown/red rust identification
+  - More robust to lighting variations than simple HSV alone
+  - Applies morphological opening/closing to reduce noise
+
+ADVANTAGES OVER rust_estimate.py:
+  - CLAHE preprocessing for better contrast and lighting adaptation
+  - Dual color-space detection (HSV + LAB) for improved accuracy
+  - ArUco marker support for automatic scale calibration
+  - Better handling of vertical objects (pipes/poles)
+  - Configurable output directory
+  - More robust to diverse lighting conditions
+
+NOTES:
+  - ArUco support requires OpenCV 4.7+ with aruco module. Falls back gracefully if unavailable.
+  - For best results, ensure the rust and panel are clearly visible and distinct in color.
+  - Vertical bias (--prefer-vertical) works best when the main object is roughly centered.
+        """,
+        formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    ap.add_argument(
+        "--glob",
+        default="images/*.jpg",
+        help="Glob pattern for input images (default: images/*.jpg). Examples: images/*.jpg, photos/*.png, data/**/*.jpg"
+    )
+    ap.add_argument(
+        "--cm-per-pixel",
+        type=float,
+        default=None,
+        help="Direct scale in cm/pixel. Use this if you know the exact scale of your camera/lens setup."
+    )
+    ap.add_argument(
+        "--ref-length-cm",
+        type=float,
+        default=None,
+        help="Physical length (cm) of a known reference object in the image. Must be paired with --ref-length-px."
+    )
+    ap.add_argument(
+        "--ref-length-px",
+        type=float,
+        default=None,
+        help="Measured pixel distance for the reference length in the image. Must be paired with --ref-length-cm."
+    )
+    ap.add_argument(
+        "--aruco",
+        action="store_true",
+        help="Enable ArUco marker detection for automatic scale calibration. Requires a 4x4_50 ArUco marker visible in images."
+    )
+    ap.add_argument(
+        "--aruco-size-cm",
+        type=float,
+        default=5.0,
+        help="Physical width of the ArUco marker in centimeters (default: 5.0). Only used with --aruco."
+    )
+    ap.add_argument(
+        "--prefer-vertical",
+        action="store_true",
+        help="Optimize panel detection for vertical objects (pipes, poles). Enhances detection of tall structures."
+    )
+    ap.add_argument(
+        "--out-dir",
+        default="out",
+        help="Output directory for results.csv and annotated images (default: out/). Created if it doesn't exist."
+    )
     return ap.parse_args()
 
 # -------------------------- Preprocessing & masks --------------------------
